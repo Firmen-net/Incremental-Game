@@ -12,7 +12,6 @@ public class GameManager : MonoBehaviour
             if (_instance == null)
             {
                 _instance = FindObjectOfType<GameManager>();
-
             }
             return _instance;
         }
@@ -21,7 +20,7 @@ public class GameManager : MonoBehaviour
     [Range(0f, 1f)]
     public float AutoCollectPercentage = 0.1f;
     public ResourceConfig[] ResourcesConfigs;
-
+    public Sprite[] ResourcesSprites;
     public Transform ResourcesParent;
     public ResourceController ResourcePrefab;
     public TapText TapTextPrefab;
@@ -30,9 +29,9 @@ public class GameManager : MonoBehaviour
     public Text GoldInfo;
     public Text AutoCollectInfo;
 
-    private List<ResourceController> _activeResources = new List<ResourceController>();
+    private List<ResourceController> activeResources = new List<ResourceController>();
     private List<TapText> _tapTextPool = new List<TapText>();
-    private float _collectSecond;
+    private float collectSecond;
     public double TotalGold { get; private set; }
     private void Start()
     {
@@ -40,36 +39,72 @@ public class GameManager : MonoBehaviour
     }
     private void Update()
     {
-        _collectSecond += Time.unscaledDeltaTime;
-        if (_collectSecond >= 1f)
-        {
-            CollectPerSecond();
-            _collectSecond = 0f;
-        }
-
+        collectSecond += Time.unscaledDeltaTime;
+            if (collectSecond >= 1f)
+            {
+                CollectPerSecond();
+                collectSecond = 0f;
+            }
+        CheckResourceCost();
         CoinIcon.transform.localScale = Vector3.LerpUnclamped(CoinIcon.transform.localScale, Vector3.one * 2f, 0.15f);
         CoinIcon.transform.Rotate(0f, 0f, Time.deltaTime * -100f);
     }
-
+    private void CheckResourceCost()
+    {
+        foreach (ResourceController resource in activeResources)
+        {
+            bool isBuyable = false;
+            if (resource.IsUnlocked)
+            {
+                isBuyable = TotalGold >= resource.GetUpgradeCost();
+            }
+            else
+            {
+                isBuyable = TotalGold >= resource.GetUnlockCost();
+            }
+            resource.ResourceImage.sprite = ResourcesSprites[isBuyable ? 1 : 0];
+        }
+    }
     private void AddAllResources()
     {
-        foreach(ResourceConfig config in ResourcesConfigs)
+        bool showResources = true;
+        foreach (ResourceConfig config in ResourcesConfigs)
         {
             GameObject obj = Instantiate(ResourcePrefab.gameObject, ResourcesParent, false);
             ResourceController resource = obj.GetComponent<ResourceController>();
 
             resource.SetConfig(config);
-            _activeResources.Add(resource);
+            obj.gameObject.SetActive(showResources);
+            if (showResources && !resource.IsUnlocked)
+            {
+                showResources = false;
+            }
+            activeResources.Add(resource);
         }
     }
-
+    public void ShowNextResource()
+    {
+        foreach (ResourceController resource in activeResources)
+        {
+            if (!resource.gameObject.activeSelf)
+            {
+                resource.gameObject.SetActive(true);
+                break;
+            }
+        }
+    }
     private void CollectPerSecond()
     {
         double output = 0;
-        foreach (ResourceController resource in _activeResources)
+        foreach (ResourceController resource in activeResources)
         {
-            output += resource.GetOutput();
+            if (resource.IsUnlocked)
+            {
+                output += resource.GetOutput();
+            }
+                
         }
+
         output *= AutoCollectPercentage;
 
         AutoCollectInfo.text = $"Auto.Collect:{output.ToString("F1")}/second";
@@ -85,9 +120,13 @@ public class GameManager : MonoBehaviour
 
     {
         double output = 0;
-        foreach (ResourceController resource in _activeResources)
+        foreach (ResourceController resource in activeResources)
         {
-          output += resource.GetOutput();
+            if (resource.IsUnlocked)
+            {
+                output += resource.GetOutput();
+            }
+                
         }
         TapText tapText = GetOrCreateTapText();
         tapText.transform.SetParent(parent, false);
